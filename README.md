@@ -1214,32 +1214,32 @@ We can see that Order 1 for the `update()` and `remove()` functions given above
 is fundamentally unsafe, as follows. If an `update()` and `remove()` for `/doc`
 happen one after the other, it gives the following sequence of operations:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-    `link('/', 'doc')`                |
-    `get('/doc')`                     |
-    `put('/doc', newDoc)`             |
-                                      | `get('/doc')`
-                                      | `rm('/doc')`
-                                      | `list('/')`
-                                      | `unlink('/', 'doc')`
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+`link('/', 'doc')`                |
+`get('/doc')`                     |
+`put('/doc', newDoc)`             |
+                                  | `get('/doc')`
+                                  | `rm('/doc')`
+                                  | `list('/')`
+                                  | `unlink('/', 'doc')`
 
 If `update` and `remove` are executed independently by different clients, then
 the operations within each one remain in the same order but the two sets of
 operations can become interleaved. For example, this order of operations is also
 possible:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-    `link('/', 'doc')`                |
-                                      | `get('/doc')`
-                                      | `rm('/doc')`
-                                      | `list('/')`
-                                      | `unlink('/', 'doc')`
-    `get('/doc')`                     |
-    `put('/doc', newDoc)`             |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+`link('/', 'doc')`                |
+                                  | `get('/doc')`
+                                  | `rm('/doc')`
+                                  | `list('/')`
+                                  | `unlink('/', 'doc')`
+`get('/doc')`                     |
+`put('/doc', newDoc)`             |
 
 None of the writes in this sequence fail, because none of the `get()` or
 `list()` calls are invalidated by some other write coming between them and the
@@ -1300,48 +1300,48 @@ Now let's examine Order 2 and see what further constraints it reveals. Without
 interleaving, the Order 2 operation sequence for `update` and `remove` looks
 like this:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-                                      | `unlink('/', 'doc')`
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+                                  | `unlink('/', 'doc')`
 
 To violate safety, we need to find a way to perform a write that produces an
 unsafe state, but does not cause a CAS conflict, and so executes successfully.
 In our previous example, this happened when `put()` was executed after
 `unlink()`:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-                                      | `unlink('/', 'doc')`
-    `put('/doc', newDoc)` ⚠️           |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+                                  | `unlink('/', 'doc')`
+`put('/doc', newDoc)` ⚠️           |
 
 In this order of operations, `put()` produces a conflict, indicated by ⚠️,
 because an `rm()` occurs between the `get()` and `put()` in `update`,
 invalidating the `get()`. To avoid this, the `get()` in `update` would have to
 happen after the `rm()` operation, for example:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-                                      | `unlink('/', 'doc')` ⚠️
-    `put('/doc', newDoc)`             |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+                                  | `unlink('/', 'doc')` ⚠️
+`put('/doc', newDoc)`             |
 
 We're not changing the operation order _within_ each function, we're just
 changing how the two functions interleave. Placing the `get()` in `update` after
@@ -1359,32 +1359,32 @@ so this execution is safe. While keeping `get()` after `rm()`, what other
 executions are possible? Only two other orderings of the `link()`, `put()` and
 `unlink()` calls are possible; either `unlink()` happens first:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `get('/doc')`                     |
-                                      | `unlink('/', 'doc')`
-    `link('/', 'doc')` ⚠️              |
-    `put('/doc', newDoc)` ⛔️          |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`get('/doc')`                     |
+                                  | `unlink('/', 'doc')`
+`link('/', 'doc')` ⚠️              |
+`put('/doc', newDoc)` ⛔️          |
 
 This invalidates the `list()` in `update` and makes `link()` fail with a
 conflict, so we don't actually execute `put()` at all (indicated by ⛔️). This is
 equivalent to the `remove` fully completing and the `update` not happening at
 all, which is safe. The other possible ordering is that `unlink()` happens last:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `unlink('/', 'doc')` ⚠️
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `unlink('/', 'doc')` ⚠️
 
 This is equivalent to the earlier case where `link()` causes `unlink()` to fail.
 `update` completes successfully, and `remove` partially executes but does not
@@ -1410,18 +1410,18 @@ just that operation -- we must retry the entire function it was part of. For
 example, imagine we handle the above conflicted `unlink()` call by just
 re-reading the `/` directory and trying the `unlink` again:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `unlink('/', 'doc')` ⚠️
-                                      | `list('/')`
-                                      | `unlink('/', 'doc')`
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `unlink('/', 'doc')` ⚠️
+                                  | `list('/')`
+                                  | `unlink('/', 'doc')`
 
 The second `unlink()` succeeds, but now we've caused a safety violation by
 unlinking `/doc` when it still exists. Instead we need to redo any reads
@@ -1432,19 +1432,19 @@ don't need to redo the `get()` call here, we can continue to use the version ID
 we got from the `rm()` call, as long as there's no evidence that version is now
 stale.
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `unlink('/', 'doc')` ⚠️
-                                      | `list('/')`
-                                      | `rm('/doc')`
-                                      | `unlink('/', 'doc')`
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `unlink('/', 'doc')` ⚠️
+                                  | `list('/')`
+                                  | `rm('/doc')`
+                                  | `unlink('/', 'doc')`
 
 This leaves the database in a safe state because `/doc` is removed before being
 unlinked. If any other client updates `/` or `/doc` while this `remove` is
@@ -1456,31 +1456,31 @@ in `update` is not invalidated because it occurs after `rm()`. The other way to
 avoid a conflict on the `/doc` shard would be for `rm()` to happen after
 `put()`, that is:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-                                      | `get('/doc')`
-                                      | `list('/')`
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `rm('/doc')` ⚠️
-                                      | `unlink('/', 'doc')` ⛔️
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+                                  | `get('/doc')`
+                                  | `list('/')`
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `rm('/doc')` ⚠️
+                                  | `unlink('/', 'doc')` ⛔️
 
 In this execution, the `get()` in `remove` is invalidated by the `put()`,
 causing `rm()` to fail with a conflict. To avoid this, the `get()` in `remove`
 would have to happen after `put()` as well:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-    `put('/doc', newDoc)`             |
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-                                      | `unlink('/', 'doc')`
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+`put('/doc', newDoc)`             |
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+                                  | `unlink('/', 'doc')`
 
 But this is just the two functions executing sequentially, so no race condition
 is possible. Each function executes to completion, keeping the database in a
@@ -1492,32 +1492,32 @@ in the `update` function, it must happen either before the `list()` call in
 `update` (which would be a sequential, non-interleaved execution), or it must
 happen after the `link()` call, as in:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-                                      | `get('/doc')`
-                                      | `list('/')`
-                                      | `rm('/doc')`
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-                                      | `unlink('/', 'doc')` ⚠️
-    `put('/doc', newDoc)`             |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+                                  | `get('/doc')`
+                                  | `list('/')`
+                                  | `rm('/doc')`
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+                                  | `unlink('/', 'doc')` ⚠️
+`put('/doc', newDoc)`             |
 
 Calling `unlink()` here would be unsafe, as it would unlink a doc that is then
 created via `put()`. Thankfully, the `unlink()` fails with a conflict because
 `link()` invalidates the `list()` in `remove`. To avoid this, the `list()` in
 `remove` would have to happen after `link()`:
 
-    `update`                          | `remove`
-    --------------------------------- | ---------------------------------
-                                      | `get('/doc')`
-    `list('/')`                       |
-    `get('/doc')`                     |
-    `link('/', 'doc')`                |
-                                      | `list('/')`
-                                      | `rm('/doc')`
-                                      | `unlink('/', 'doc')`
-    `put('/doc', newDoc)` ⚠️           |
+`update`                          | `remove`
+--------------------------------- | ---------------------------------
+                                  | `get('/doc')`
+`list('/')`                       |
+`get('/doc')`                     |
+`link('/', 'doc')`                |
+                                  | `list('/')`
+                                  | `rm('/doc')`
+                                  | `unlink('/', 'doc')`
+`put('/doc', newDoc)` ⚠️           |
 
 This forces `rm()` to happen later, which causes `put()` to fail, or `put()`
 happens first and causes `rm()` to fail. Any attempt to escape a conflict either
@@ -1550,13 +1550,13 @@ containing this tree of documents:
 
 This tree contains five items:
 
-    path             | type      | value
-    ---------------- | --------- | ------------------
-    `/`              | directory | `['path/']`
-    `/path/`         | directory | `['a.txt', 'to/']`
-    `/path/a.txt`    | document  | `<blob>`
-    `/path/to/`      | directory | `['b.txt']`
-    `/path/to/b.txt` | document  | `<blob>`
+path             | type      | value
+---------------- | --------- | ------------------
+`/`              | directory | `['path/']`
+`/path/`         | directory | `['a.txt', 'to/']`
+`/path/a.txt`    | document  | `<blob>`
+`/path/to/`      | directory | `['b.txt']`
+`/path/to/b.txt` | document  | `<blob>`
 
 If we remove `/path/to/b.txt`, this should implicitly remove the `/path/to/`
 directory, because `b.txt` is the only document in that directory. It's not a
@@ -1583,11 +1583,11 @@ These would leave the database in the final state...
 
 ... containing just three items:
 
-    path          | type      | value
-    ------------- | --------- | -----------
-    `/`           | directory | `['path/']`
-    `/path/`      | directory | `['a.txt']`
-    `/path/a.txt` | document  | `<blob>`
+path          | type      | value
+------------- | --------- | -----------
+`/`           | directory | `['path/']`
+`/path/`      | directory | `['a.txt']`
+`/path/a.txt` | document  | `<blob>`
 
 We must make sure that we don't delete ancestor directories that are not in fact
 empty -- if we remove the `/path/to/` directory but it actually contains items
@@ -1612,14 +1612,14 @@ state...
 
 ... consisting of six items:
 
-    path             | type      | value
-    ---------------- | --------- | --------------------
-    `/`              | directory | `['path/']`
-    `/path/`         | directory | `['a.txt', 'to/']`
-    `/path/a.txt`    | document  | `<blob>`
-    `/path/to/`      | directory | `['b.txt', 'c.txt']`
-    `/path/to/b.txt` | document  | `<blob>`
-    `/path/to/c.txt` | document  | `<blob>`
+path             | type      | value
+---------------- | --------- | --------------------
+`/`              | directory | `['path/']`
+`/path/`         | directory | `['a.txt', 'to/']`
+`/path/a.txt`    | document  | `<blob>`
+`/path/to/`      | directory | `['b.txt', 'c.txt']`
+`/path/to/b.txt` | document  | `<blob>`
+`/path/to/c.txt` | document  | `<blob>`
 
 Is it possible to execute these `remove()` and `update()` calls concurrently in
 a way that leads to an unsafe state, by incorrectly deleting the `/path/to/`
@@ -1627,27 +1627,27 @@ directory? If these are executed sequentially, this is the complete set of
 operations involved, where we have labelled each operation with a letter to make
 them easier to refer to:
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
 
 The lines reading `----` denote _barriers_: within the `update` and `remove`
 calls, operations may be executed in parallel and so run in unpredictable
@@ -1679,27 +1679,27 @@ hold:
 It turns out there is an ordering of these operations allowed by these rules
 that produces a problem:
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')` ⚠️
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')` ⚠️
 
 As required, _P_ comes after _C_, and _N_ is not between _B_ and _F_. However,
 _P_ happens between _C_ and _G_ and causes _G_ to fail with a conflict, as _C_
@@ -1714,28 +1714,28 @@ We can address this by forcing `unlink()` calls to execute sequentially,
 starting with the deepest directory. That is, _F_ must happen after _G_, which
 we'll denote by adding a barrier between them.
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')` ⚠️
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')` ⛔️
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')` ⚠️
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')` ⛔️
 
 This modification to the previous execution means _F_ will no longer execute;
 the barrier means that _F_ will only run if _G_ completes successfully. At no
@@ -1746,28 +1746,28 @@ To prevent the conflict on _G_, we would need _P_ not to happen between _C_ and
 _G_. Remember we only perform _F_ if _P_ happens after _C_, so the only
 situation worth investigating is where _P_ happens after _G_:
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _P_ | `link('/path/to/', 'c.txt')` ⚠️   |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_P_ | `link('/path/to/', 'c.txt')` ⚠️   |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
 
 Now _G_ falls between _K_ and _P_ and causes _P_ to fail with a conflict, and
 thus _Q_ does not happen at all. `remove` runs to completion, and `update` fails
@@ -1777,56 +1777,56 @@ To avoid this conflict, _K_ would need to happen after _G_. We can move _K_ down
 below _L_, but the barrier below that necessitates moving all the other `update`
 operations after this after _G_ as well.
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _K_ | `list('/path/to/')`              |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')` ⚠️
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_K_ | `list('/path/to/')`              |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')` ⚠️
 
 Call _N_ now falls between _B_ and _F_ and causes _F_ to fail with a conflict,
 and so we don't perform the problematic `unlink()` call and _Q_ is safe. We
 can't move _N_ up before _B_ without also moving _K_ before _G_, due to the
 barriers, so let's instead try moving _N_ to happen after _F_.
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _K_ | `list('/path/to/')`              |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
-    _N_ | `link('/path/', 'to/')` ⚠️        |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_K_ | `list('/path/to/')`              |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
+_N_ | `link('/path/', 'to/')` ⚠️        |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
 
 _F_ now happens between _J_ and _N_, causing _N_ to fail with a conflict and
 therefore _Q_ does not happen at all and we once again have a safe execution.
@@ -1834,28 +1834,28 @@ Avoiding this conflict would either require moving _F_ to happen after _N_,
 which is just the preceding example, or moving it before _J_. Even moving _J_ as
 late as possible and keeping _K_ after _G_, this gives us:
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-    _H_ | `list('/')`                      |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _K_ | `list('/path/to/')`              |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
-    _J_ | `list('/path/')`                 |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+_H_ | `list('/')`                      |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_K_ | `list('/path/to/')`              |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
+_J_ | `list('/path/')`                 |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+_N_ | `link('/path/', 'to/')`          |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
 
 This is basically the same as sequential execution. All the writes in `remove`
 succeed because `update` hasn't performed any writes yet. `update` then performs
@@ -1867,82 +1867,82 @@ Let's take an even more extreme example where the entire `update` operation
 happens between _G_ and _F_, which themselves cannot be re-ordered. Is it
 possible for the call to _G_ to succeed, and still have _F_ happen erroneously?
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)`     |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')` ⚠️
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_N_ | `link('/path/', 'to/')`          |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)`     |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')` ⚠️
 
 Here _F_ fails with a conflict because _N_ happens between _B_ and _F_. We can
 move _N_ before _B_, but that leaves a conflict on _P_ because _G_ happens
 first. If we move _P_ before _G_ then _G_ fails instead, and prevents _F_ from
 happening.
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-        |                                  | _A_ | `list('/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _N_ | `link('/path/', 'to/')`          |     |
-        |                                  | _B_ | `list('/path/')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _M_ | `link('/', 'path/')`             |     |
-    _P_ | `link('/path/to/', 'c.txt')` ⚠️   |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+    |                                  | _A_ | `list('/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_N_ | `link('/path/', 'to/')`          |     |
+    |                                  | _B_ | `list('/path/')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_M_ | `link('/', 'path/')`             |     |
+_P_ | `link('/path/to/', 'c.txt')` ⚠️   |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
 
 Or, we can move _N_ after _F_, but that causes a conflict on _N_ that prevents
 _Q_ from happening.
 
-        | `update`                         |     |`remove`
-    --- | -------------------------------- | --- | --------------------------------
-        |                                  | _A_ | `list('/')`
-        |                                  | _B_ | `list('/path/')`
-        |                                  | _C_ | `list('/path/to/')`
-        |                                  | _D_ | `get('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _E_ | `rm('/path/to/b.txt')`
-        |                                  |     | `----`
-        |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
-    _H_ | `list('/')`                      |     |
-    _J_ | `list('/path/')`                 |     |
-    _K_ | `list('/path/to/')`              |     |
-    _L_ | `get('/path/to/c.txt')`          |     |
-        | `----`                           |     |
-    _M_ | `link('/', 'path/')`             |     |
-    _P_ | `link('/path/to/', 'c.txt')`     |     |
-        |                                  |     | `----`
-        |                                  | _F_ | `unlink('/path/', 'to/')`
-    _N_ | `link('/path/', 'to/')` ⚠️        |     |
-        | `----`                           |     |
-    _Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
+    | `update`                         |     |`remove`
+--- | -------------------------------- | --- | --------------------------------
+    |                                  | _A_ | `list('/')`
+    |                                  | _B_ | `list('/path/')`
+    |                                  | _C_ | `list('/path/to/')`
+    |                                  | _D_ | `get('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _E_ | `rm('/path/to/b.txt')`
+    |                                  |     | `----`
+    |                                  | _G_ | `unlink('/path/to/', 'b.txt')`
+_H_ | `list('/')`                      |     |
+_J_ | `list('/path/')`                 |     |
+_K_ | `list('/path/to/')`              |     |
+_L_ | `get('/path/to/c.txt')`          |     |
+    | `----`                           |     |
+_M_ | `link('/', 'path/')`             |     |
+_P_ | `link('/path/to/', 'c.txt')`     |     |
+    |                                  |     | `----`
+    |                                  | _F_ | `unlink('/path/', 'to/')`
+_N_ | `link('/path/', 'to/')` ⚠️        |     |
+    | `----`                           |     |
+_Q_ | `put('/path/to/c.txt', doc)` ⛔️  |     |
 
 We see that attempts to order events such that both _F_ and _Q_ execute and
 leave the database in an unsafe state ends up producing a conflict somewhere
