@@ -1214,16 +1214,16 @@ We can see that Order 1 for the `update()` and `remove()` functions given above
 is fundamentally unsafe, as follows. If an `update()` and `remove()` for `/doc`
 happen one after the other, it gives the following sequence of operations:
 
-`update`                          | `remove`
---------------------------------- | ---------------------------------
-`list('/')`                       |
-`link('/', 'doc')`                |
-`get('/doc')`                     |
-`put('/doc', newDoc)`             |
-                                  | `get('/doc')`
-                                  | `rm('/doc')`
-                                  | `list('/')`
-                                  | `unlink('/', 'doc')`
+| `update`                          | `remove`
+| --------------------------------- | ---------------------------------
+| `list('/')`                       |
+| `link('/', 'doc')`                |
+| `get('/doc')`                     |
+| `put('/doc', newDoc)`             |
+|                                   | `get('/doc')`
+|                                   | `rm('/doc')`
+|                                   | `list('/')`
+|                                   | `unlink('/', 'doc')`
 
 If `update` and `remove` are executed independently by different clients, then
 the operations within each one remain in the same order but the two sets of
