@@ -108,17 +108,17 @@ This tree contains four documents, whose paths are `/alice/notes.txt`,
 the names of its direct children: `['alice/', 'bob/', 'carol/']`. In total this
 tree consists of nine items:
 
-    | path                       | type      | value
-    | -------------------------- | --------- | ------------------------------
-    | `/`                        | directory | `['alice/', 'bob/', 'carol/']`
-    | `/alice/`                  | directory | `['notes.txt']`
-    | `/alice/notes.txt`         | document  | `<blob>`
-    | `/bob/`                    | directory | `['pictures/']`
-    | `/bob/pictures/`           | directory | `['avatar.jpg', 'header.png']`
-    | `/bob/pictures/avatar.jpg` | document  | `<blob>`
-    | `/bob/pictures/header.png` | document  | `<blob>`
-    | `/carol/`                  | directory | `['profile.json']`
-    | `/carol/profile.json`      | document  | `<blob>`
+    | path                       | type      | value                          |
+    | -------------------------- | --------- | ------------------------------ |
+    | `/`                        | directory | `['alice/', 'bob/', 'carol/']` |
+    | `/alice/`                  | directory | `['notes.txt']`                |
+    | `/alice/notes.txt`         | document  | `<blob>`                       |
+    | `/bob/`                    | directory | `['pictures/']`                |
+    | `/bob/pictures/`           | directory | `['avatar.jpg', 'header.png']` |
+    | `/bob/pictures/avatar.jpg` | document  | `<blob>`                       |
+    | `/bob/pictures/header.png` | document  | `<blob>`                       |
+    | `/carol/`                  | directory | `['profile.json']`             |
+    | `/carol/profile.json`      | document  | `<blob>`                       |
 
 Strictly speaking, directories are redundant and their existence and values are
 derived from the documents that exist. However, we want to store them explicitly
