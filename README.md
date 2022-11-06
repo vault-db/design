@@ -3717,3 +3717,43 @@ for handling a conflict is:
   item-level writes ε.
 - Build a new plan graph for the combined set of operations ω + ε - δ.
 - Continue executing the modified plan.
+
+In general, the replanning phase may be asynchronous. Consider our three write
+operations:
+
+- `update()` always performs the same set of `link()` and `put()` calls, without
+  needing to read the shards first. It only needs the shards loaded into memory
+  to prevent the race conditions with concurrent `remove()` calls.
+
+- `remove()` needs to read the shards in order to plan which items it needs to
+  `unlink()`. However, the set of shards it needs to read is always predictable:
+  it needs to load the shards containing the document itself and all its
+  ancestor directories.
+
+- `prune()` needs to read an unpredictable set of shards by performing a
+  `find()` call to discover all the documents it needs to delete. This may
+  include loading shards that aren't already in the task's cache, because the
+  conflict was caused by an `update()` adding new documents to the directory.
+
+Once the conflicted shard has been reloaded, `update()` and `remove()` should
+not cause any new shard reads to happen, and any information they need can be
+read quickly from data in the task's shard cache. However, resetting a `prune()`
+operation may incur additional I/O to read new shards. We would rather not pause
+execution of all requests while we're waiting for this I/O and so the above
+rules need a small amendment:
+
+- When the conflict is first detected, immediately remove the operations δ from
+  the pending graph so that it only contains operations for unconflicted Query
+  calls. It may be simpler to build a fresh graph out of the operations in ω - δ
+  than to actually remove δ operations from the existing graph.
+
+- Once a conflicted operation's setup phase is complete and it generates a new
+  set of item-level writes ε, we can incrementally add ε to the pending graph
+  using the normal rules for adding operations. The pending graph may be
+  different from what it was when the conflict first occurred, if some planned
+  requests have begun executing since the conflict.
+
+When adding new operations to a graph that's begun executing, we must only add
+operations to groups that have not started executing yet. Once a request is
+started for a write group, it should be locked and no further operations can be
+added to it.
