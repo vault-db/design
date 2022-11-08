@@ -2548,18 +2548,18 @@ the required ordering so that we do not start writing an operation until after
 all its dependencies are successfully committed.
 
     Shard │
-          │                                             ┌───────────┐
-        A │                                             │ WRITE ░░░░│
-          │                                             ├───────────┘
-          │                                             └─ w2, w7
-          │   ┌───────────┐               ┌───────────┐               ┌───────────┐
-        B │   │ WRITE ░░░░│               │ WRITE ░░░░│               │ WRITE ░░░░│
-          │   ├───────────┘               ├───────────┘               ├───────────┘
-          │   └─ w1, w3                   └─ w5, w6                   └─ w8
-          │                 ┌───────────┐
-        C │                 │ WRITE ░░░░│
-          │                 ├───────────┘
-                            └─ w4
+          │                                                   ┌─────────────┐
+        A │                                                   │ WRITE ░░░░░░│
+          │                                                   ├─────────────┘
+          │                                                   └─ w2, w7
+          │   ┌─────────────┐                 ┌─────────────┐                 ┌─────────────┐
+        B │   │ WRITE ░░░░░░│                 │ WRITE ░░░░░░│                 │ WRITE ░░░░░░│
+          │   ├─────────────┘                 ├─────────────┘                 ├─────────────┘
+          │   └─ w1, w3                       └─ w5, w6                       └─ w8
+          │                   ┌─────────────┐
+        C │                   │ WRITE ░░░░░░│
+          │                   ├─────────────┘
+                              └─ w4
 
 However, this execution is not optimal; we perform a total of five writes, all
 sequentially, and _w2_ is scheduled much later than necessary, considering it
